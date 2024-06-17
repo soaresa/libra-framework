@@ -5,7 +5,7 @@ For core system code, we observe the following patterns.
 
 If you see "belt and suspenders" in the code, we are flagging the cases below. It means "yes this appears redundant, but we don't trust your fingers".
 
- Move is a new languge, and devs won't have developed intuitions about it. Here we are safeguaring against developer errors, not malicious hacks. It's not only for logic bugs, typos, and incomplete work. Some  Move lang features make it that a fat finger, a git merge, a documentation commit, could expose a public api.
+ Move is a new language, and devs won't have developed intuitions about it. Here we are safeguaring against developer errors, not malicious hacks. It's not only for logic bugs, typos, and incomplete work. Some  Move lang features make it that a fat finger, a git merge, a documentation commit, could expose a public api.
 
 For these cases you will see "belt and suspenders" implementations. They will seem ineficient and paranoid. But over time and over many developers, one of these may save from a catastrophic error.
 
