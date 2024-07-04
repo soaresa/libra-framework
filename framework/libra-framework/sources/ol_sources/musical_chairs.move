@@ -8,26 +8,26 @@ module ol_framework::musical_chairs {
     use std::fixed_point32;
     use std::vector;
 
-    // use diem_std::debug::print;
-
     friend diem_framework::genesis;
     friend diem_framework::diem_governance;
     friend ol_framework::epoch_boundary;
     #[test_only]
     friend ol_framework::mock;
 
+    /// we don't want to play the validator selection games
+    /// before we're clear out of genesis
+    const EPOCH_TO_START_EVAL: u64 = 2;
+    /// Number of vals needed before PoF becomes competitive for
+    /// performant nodes as well
+    const VAL_BOOT_UP_THRESHOLD: u64 = 19;
+    /// Minimum number of seats to apply random reduction
+    const SEATS_THRESHOLD: u64 = 40;
+    /// Max percentage reduction in the number of seats
+    const MAX_RANDOM_REDUCTION: u64 = 10;
 
-  /// we don't want to play the validator selection games
-  /// before we're clear out of genesis
-  const EPOCH_TO_START_EVAL: u64 = 2;
-  /// Number of vals needed before PoF becomes competitive for
-  /// performant nodes as well
-  const VAL_BOOT_UP_THRESHOLD: u64 = 19;
-
-  /// we can't evaluate the performance of validators
-  /// when there are too few rounds committed
-  const MINIMUM_ROUNDS_PER_EPOCH: u64 = 1000;
-
+    /// we can't evaluate the performance of validators
+    /// when there are too few rounds committed
+    const MINIMUM_ROUNDS_PER_EPOCH: u64 = 1000;
 
     struct Chairs has key {
         // The number of chairs in the game
@@ -94,10 +94,7 @@ module ol_framework::musical_chairs {
         let (compliant_vals, seats) = calc_max_seats(epoch, round);
 
         // musical chairs, add randomness for sufficiently safe sized sets
-        if (seats > 40) {
-          let rand = randomness::u8_range(0, (seats/10 as u8));
-          seats = seats - (rand as u64);
-        };
+        let seats = apply_maybe_random_reduction(seats);
 
         let chairs = borrow_global_mut<Chairs>(@ol_framework);
         chairs.seats_offered = seats;
@@ -175,6 +172,18 @@ module ol_framework::musical_chairs {
         };
 
         (compliant_vals, seats_offered)
+    }
+
+    // Applies a random reduction to the number of seats if the seats exceed the threshold.
+    // Reduces the seats by up to 10% to force competition among validators.
+    fun apply_maybe_random_reduction(seats: u64): u64 {
+        if (seats > SEATS_THRESHOLD) {
+            let max_reduction = seats / MAX_RANDOM_REDUCTION;
+            let rand = randomness::u8_range(0, (max_reduction as u8) + 1);
+            seats - (rand as u64)
+        } else {
+            seats
+        }
     }
 
     // Update seat count to match filled seats post-PoF auction.
@@ -274,6 +283,52 @@ module ol_framework::musical_chairs {
     public entry fun initialize_chairs(vm: signer) acquires Chairs {
       chain_id::initialize_for_test(&vm, 4);
       initialize(&vm, 10);
-      assert!(get_current_seats() == 10, 1004);
+      assert!(get_current_seats() == 10, 73573001);
+    }
+
+    #[test]
+    fun test_apply_maybe_random_reduction_below_threshold() {
+        let seats = 30;
+        let result = apply_maybe_random_reduction(seats);
+        assert!(result == seats, 73573002);
+    }
+
+    #[test]
+    fun test_apply_maybe_random_reduction_at_threshold() {
+        let seats = SEATS_THRESHOLD;
+        let result = apply_maybe_random_reduction(seats);
+        assert!(result == seats, 73573003);
+    }
+
+    #[test(root = @ol_framework)]
+    fun test_apply_maybe_random_reduction_above_threshold(root: &signer) {
+        randomness::initialize(root);
+        randomness::set_seed(x"0000000000000000000000000000000000000000000000000000000000000000");
+        let seats = 50;
+        let i = 0;
+
+        // Test a sample of 10 random values to ensure all are within expected limits
+        while (i < 10) {
+            let result = apply_maybe_random_reduction(seats);
+            assert!(result <= seats, 73573004); // Check if the result does not exceed the original number of seats
+            assert!(result >= seats - (seats / MAX_RANDOM_REDUCTION), 73573005); // Check if the result is above the minimum reduction limit
+            i = i + 1;
+        }
+    }
+
+    #[test(root = @ol_framework)]
+    fun test_apply_maybe_random_reduction_max_reduction(root: &signer) {
+        randomness::initialize(root);
+        randomness::set_seed(x"0000000000000000000000000000000000000000000000000000000000000000");
+        let seats = SEATS_THRESHOLD + 1;
+        let i = 0;
+
+        // Test a sample of 10 random values to ensure all are within expected limits
+        while (i < 10) {
+            let result = apply_maybe_random_reduction(seats);
+            assert!(result <= seats, 73573006); // Check if the result does not exceed the original number of seats
+            assert!(result >= seats - (seats / MAX_RANDOM_REDUCTION), 73573007); // Check if the result is above the minimum reduction limit
+            i = i + 1;
+        };
     }
 }
